@@ -47,8 +47,8 @@ type PlaylistInfo struct {
 
 // Représente un morceau de média dans une playlist M3U8
 type Chunk struct {
-	Number   uint64  // Numéro du morceau
-	Id       string  // Identifiant du morceau
+	Id       uint64  // Numéro du morceau
+	Uri      string  // Identifiant du morceau
 	Duration float64 // Durée du morceau (en secondes)
 }
 
@@ -195,8 +195,8 @@ func (v *Video) GetChunks(playlist *PlaylistInfo) []Chunk {
 	chunks := make([]Chunk, 0)
 	for _, s := range medias.GetAllSegments() {
 		chunks = append(chunks, Chunk{
-			Number:   s.SeqId,
-			Id:       fmt.Sprintf("%s/%s", baseUrl, s.URI),
+			Id:       s.SeqId,
+			Uri:      fmt.Sprintf("%s/%s", baseUrl, s.URI),
 			Duration: s.Duration,
 		})
 	}
