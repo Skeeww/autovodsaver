@@ -3,6 +3,10 @@ package twitch
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"io"
+	"net/http"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -36,6 +40,11 @@ type PlaylistInfo struct {
 	Resolution string
 	Framerate  float64
 	Chunked    bool
+}
+
+type Chunk struct {
+	Id       string
+	Duration float64
 }
 
 type videoResponse struct {
@@ -147,5 +156,28 @@ func (v *Video) GetPlaylist() *PlaylistInfo {
 	return parseM3U8(internals.GetPlaylists(v.Id, tokens.Value, tokens.Signature))
 }
 
-func (v *Video) GetChunks(playlist *PlaylistInfo) {
+func (v *Video) GetChunks(playlist *PlaylistInfo) string {
+	res, httpGetError := http.Get(playlist.Url)
+	if httpGetError != nil {
+		panic(httpGetError)
+	}
+
+	data, readAllError := io.ReadAll(res.Body)
+	if readAllError != nil {
+		panic(readAllError)
+	}
+
+	chunks, playlistType, decodeError := m3u8.Decode(*bytes.NewBuffer(data), true)
+	if decodeError != nil {
+		panic(decodeError)
+	}
+	if playlistType != m3u8.MEDIA {
+		panic("wrong playlist type")
+	}
+
+	fmt.Println(chunks.(*m3u8.MediaPlaylist).Segments[0].URI)
+
+	baseUrl := path.Dir(playlist.Url)
+	fmt.Println(baseUrl)
+	return baseUrl
 }
