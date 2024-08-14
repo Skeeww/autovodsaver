@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"path"
 	"strconv"
 	"strings"
@@ -47,9 +48,11 @@ type PlaylistInfo struct {
 
 // Représente un morceau de média dans une playlist M3U8
 type Chunk struct {
-	Id       uint64  // Numéro du morceau
-	Uri      string  // Identifiant du morceau
-	Duration float64 // Durée du morceau (en secondes)
+	Id         uint64  // Numéro du morceau
+	Uri        string  // Identifiant du morceau
+	Duration   float64 // Durée du morceau (en secondes)
+	Path       string  // Chemin d'accès au morceau
+	Downloaded bool    // Indique si le morceau a été téléchargé
 }
 
 // Représente une réponse de l'api GraphQL de Twitch lors de la requête d'information sur une vidéo
@@ -195,11 +198,35 @@ func (v *Video) GetChunks(playlist *PlaylistInfo) []Chunk {
 	chunks := make([]Chunk, 0)
 	for _, s := range medias.GetAllSegments() {
 		chunks = append(chunks, Chunk{
-			Id:       s.SeqId,
-			Uri:      fmt.Sprintf("%s/%s", baseUrl, s.URI),
-			Duration: s.Duration,
+			Id:         s.SeqId,
+			Uri:        fmt.Sprintf("%s/%s", baseUrl, s.URI),
+			Duration:   s.Duration,
+			Downloaded: false,
 		})
 	}
 
 	return chunks
+}
+
+func Concatenate(chunks *[]Chunk, outputPath string) {
+	if !isSorted(chunks) {
+		panic("chunks are not in the right order")
+	}
+	file, _ := os.OpenFile(outputPath, os.O_CREATE|os.O_APPEND, os.ModePerm)
+	for idx, chunk := range *chunks {
+		chunkFile, _ := os.Open(chunk.Path)
+		io.Copy(file, chunkFile)
+		chunkFile.Close()
+		fmt.Printf("%d/%d (%f%%)\n", idx+1, len(*chunks), (float64(idx)/float64(len(*chunks)))*100)
+	}
+	file.Close()
+}
+
+func isSorted(chunks *[]Chunk) bool {
+	for i := 1; i < len(*chunks); i++ {
+		if (*chunks)[i].Id != (*chunks)[i-1].Id+1 {
+			return false
+		}
+	}
+	return true
 }
