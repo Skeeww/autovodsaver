@@ -14,6 +14,7 @@ import (
 
 	"enssat.tv/autovodsaver/twitch/internals"
 	"github.com/grafov/m3u8"
+	"github.com/rs/zerolog/log"
 )
 
 type ContextKey int
@@ -214,19 +215,19 @@ func (v *Video) Download(outputPath string) error {
 	if playlist == nil {
 		return fmt.Errorf("playlist choosen is nil")
 	}
-	fmt.Printf("found playlist: %s (resolution=%s;framerate=%f)\n", playlist.Url, playlist.Resolution, playlist.Framerate)
+	log.Debug().Msgf("found playlist: %s (resolution=%s;framerate=%f)\n", playlist.Url, playlist.Resolution, playlist.Framerate)
 	chunks := v.GetChunks(playlist)
 	if len(chunks) == 0 {
 		return fmt.Errorf("no chunk found in the playlist")
 	}
-	fmt.Printf("found %d chunks\n", len(chunks))
+	log.Debug().Msgf("found %d chunks\n", len(chunks))
 
 	// Create temporary directory to store all chunks
 	tmpPath, mkTmpDirError := os.MkdirTemp(os.TempDir(), fmt.Sprintf("%s_*", v.Id))
 	if mkTmpDirError != nil {
 		return mkTmpDirError
 	}
-	fmt.Printf("temporary folder created: %s\n", tmpPath)
+	log.Debug().Msgf("temporary folder created: %s\n", tmpPath)
 	defer os.Remove(tmpPath)
 
 	// Download all chunks and store them in the temporary directory
@@ -251,11 +252,11 @@ func (v *Video) Download(outputPath string) error {
 			return copyError
 		}
 		if bytesWritten == 0 {
-			fmt.Println("[WARN] No bytes written for chunk", chunks[i].Id)
+			log.Warn().Msgf("[WARN] No bytes written for chunk %d", chunks[i].Id)
 		}
 		chunks[i].Downloaded = true
 		chunks[i].Path = chunkFilePath
-		fmt.Printf("(%d/%d) chunk %d downloaded: %s\t(%f%%)\n", i+1, len(chunks), chunks[i].Id, chunks[i].Path, float32(i+1)/float32(len(chunks))*100)
+		log.Debug().Msgf("(%d/%d) chunk %d downloaded: %s\t(%f%%)\n", i+1, len(chunks), chunks[i].Id, chunks[i].Path, float32(i+1)/float32(len(chunks))*100)
 	}
 
 	// Concatenate all chunks together in a single file
@@ -280,9 +281,9 @@ func (v *Video) Download(outputPath string) error {
 			return copyError
 		}
 		if bytesWritten == 0 {
-			fmt.Println("[WARN] No bytes written for chunk", chunk.Id, "in output file")
+			log.Warn().Msgf("[WARN] No bytes written for chunk %d in output file", chunk.Id)
 		}
-		fmt.Printf("(%d/%d) chunk %d concatenated\t(%f%%)\n", i+1, len(chunks), chunks[i].Id, float32(i+1)/float32(len(chunks))*100)
+		log.Debug().Msgf("(%d/%d) chunk %d concatenated\t(%f%%)\n", i+1, len(chunks), chunks[i].Id, float32(i+1)/float32(len(chunks))*100)
 	}
 
 	return nil
