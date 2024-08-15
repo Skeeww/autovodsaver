@@ -14,6 +14,8 @@ import (
 
 	"enssat.tv/autovodsaver/twitch/internals"
 	"github.com/grafov/m3u8"
+	"github.com/k0kubun/go-ansi"
+	"github.com/schollz/progressbar/v3"
 )
 
 type ContextKey int
@@ -209,15 +211,38 @@ func (v *Video) GetChunks(playlist *PlaylistInfo) []Chunk {
 }
 
 func Concatenate(chunks *[]Chunk, outputPath string) {
+	bar := progressbar.NewOptions(len(*chunks),
+		progressbar.OptionSetWriter(ansi.NewAnsiStdout()),
+		progressbar.OptionEnableColorCodes(true),
+		progressbar.OptionShowBytes(true),
+		progressbar.OptionSetWidth(15),
+		progressbar.OptionSetDescription("[cyan][2/2][reset] Concatenate chunks..."),
+		progressbar.OptionSetTheme(progressbar.Theme{
+			Saucer:        "[green]=[reset]",
+			SaucerHead:    "[green]>[reset]",
+			SaucerPadding: " ",
+			BarStart:      "[",
+			BarEnd:        "]",
+		}))
 	if !isSorted(chunks) {
 		panic("chunks are not in the right order")
 	}
-	file, _ := os.OpenFile(outputPath, os.O_CREATE|os.O_APPEND, os.ModePerm)
-	for idx, chunk := range *chunks {
-		chunkFile, _ := os.Open(chunk.Path)
-		io.Copy(file, chunkFile)
+	file, outputFileError := os.OpenFile(outputPath, os.O_CREATE|os.O_WRONLY, os.ModePerm)
+	if outputFileError != nil {
+		panic(outputFileError)
+	}
+	for _, chunk := range *chunks {
+		chunkFile, chunkFileError := os.OpenFile(chunk.Path, os.O_RDONLY, os.ModePerm)
+		if chunkFileError != nil {
+			panic(chunkFileError)
+		}
+		_, copyError := io.Copy(file, chunkFile)
+		if copyError != nil {
+			panic(copyError)
+		}
 		chunkFile.Close()
-		fmt.Printf("%d/%d (%f%%)\n", idx+1, len(*chunks), (float64(idx)/float64(len(*chunks)))*100)
+		// fmt.Printf("%d/%d (%f%%)\t%d bytes copied\n", idx+1, len(*chunks), (float64(idx)/float64(len(*chunks)))*100, written)
+		bar.Add(1)
 	}
 	file.Close()
 }
