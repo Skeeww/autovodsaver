@@ -14,8 +14,6 @@ import (
 
 	"enssat.tv/autovodsaver/twitch/internals"
 	"github.com/grafov/m3u8"
-	"github.com/k0kubun/go-ansi"
-	"github.com/schollz/progressbar/v3"
 )
 
 type ContextKey int
@@ -210,41 +208,84 @@ func (v *Video) GetChunks(playlist *PlaylistInfo) []Chunk {
 	return chunks
 }
 
-func Concatenate(chunks *[]Chunk, outputPath string) {
-	bar := progressbar.NewOptions(len(*chunks),
-		progressbar.OptionSetWriter(ansi.NewAnsiStdout()),
-		progressbar.OptionEnableColorCodes(true),
-		progressbar.OptionShowBytes(true),
-		progressbar.OptionSetWidth(15),
-		progressbar.OptionSetDescription("[cyan][2/2][reset] Concatenate chunks..."),
-		progressbar.OptionSetTheme(progressbar.Theme{
-			Saucer:        "[green]=[reset]",
-			SaucerHead:    "[green]>[reset]",
-			SaucerPadding: " ",
-			BarStart:      "[",
-			BarEnd:        "]",
-		}))
-	if !isSorted(chunks) {
-		panic("chunks are not in the right order")
+func (v *Video) Download(outputPath string) error {
+	// Get all chunks download URI
+	playlist := v.GetPlaylist()
+	if playlist == nil {
+		return fmt.Errorf("playlist choosen is nil")
 	}
-	file, outputFileError := os.OpenFile(outputPath, os.O_CREATE|os.O_WRONLY, os.ModePerm)
-	if outputFileError != nil {
-		panic(outputFileError)
+	fmt.Printf("found playlist: %s (resolution=%s;framerate=%f)\n", playlist.Url, playlist.Resolution, playlist.Framerate)
+	chunks := v.GetChunks(playlist)
+	if len(chunks) == 0 {
+		return fmt.Errorf("no chunk found in the playlist")
 	}
-	for _, chunk := range *chunks {
-		chunkFile, chunkFileError := os.OpenFile(chunk.Path, os.O_RDONLY, os.ModePerm)
-		if chunkFileError != nil {
-			panic(chunkFileError)
+	fmt.Printf("found %d chunks\n", len(chunks))
+
+	// Create temporary directory to store all chunks
+	tmpPath, mkTmpDirError := os.MkdirTemp(os.TempDir(), fmt.Sprintf("%s_*", v.Id))
+	if mkTmpDirError != nil {
+		return mkTmpDirError
+	}
+	fmt.Printf("temporary folder created: %s\n", tmpPath)
+	defer os.Remove(tmpPath)
+
+	// Download all chunks and store them in the temporary directory
+	// We don't use a (for range) because it yield a copy of chunk struct
+	// As we made modification to chunks, we use a classic for loop over our array
+	for i := 0; i < len(chunks); i++ {
+		chunkFilePath := path.Join(tmpPath, strconv.Itoa(int(chunks[i].Id)))
+		chunkFile, openChunkError := os.OpenFile(chunkFilePath, os.O_CREATE|os.O_WRONLY, 0660)
+		if openChunkError != nil {
+			return openChunkError
 		}
-		_, copyError := io.Copy(file, chunkFile)
+		defer chunkFile.Close()
+
+		response, getChunkError := http.Get(chunks[i].Uri)
+		if getChunkError != nil {
+			return getChunkError
+		}
+		defer response.Body.Close()
+
+		bytesWritten, copyError := io.Copy(chunkFile, response.Body)
 		if copyError != nil {
-			panic(copyError)
+			return copyError
 		}
-		chunkFile.Close()
-		// fmt.Printf("%d/%d (%f%%)\t%d bytes copied\n", idx+1, len(*chunks), (float64(idx)/float64(len(*chunks)))*100, written)
-		bar.Add(1)
+		if bytesWritten == 0 {
+			fmt.Println("[WARN] No bytes written for chunk", chunks[i].Id)
+		}
+		chunks[i].Downloaded = true
+		chunks[i].Path = chunkFilePath
+		fmt.Printf("(%d/%d) chunk %d downloaded: %s\t(%f%%)\n", i+1, len(chunks), chunks[i].Id, chunks[i].Path, float32(i+1)/float32(len(chunks))*100)
 	}
-	file.Close()
+
+	// Concatenate all chunks together in a single file
+	if !isSorted(&chunks) {
+		return fmt.Errorf("chunks are not in the right order")
+	}
+	outputFile, outputFileError := os.OpenFile(outputPath, os.O_CREATE|os.O_WRONLY, 0660)
+	if outputFileError != nil {
+		return outputFileError
+	}
+	defer outputFile.Close()
+	for i, chunk := range chunks {
+		chunkFilePath := chunk.Path
+		chunkFile, openChunkError := os.OpenFile(chunkFilePath, os.O_RDONLY, 0660)
+		if openChunkError != nil {
+			return openChunkError
+		}
+		defer chunkFile.Close()
+
+		bytesWritten, copyError := io.Copy(outputFile, chunkFile)
+		if copyError != nil {
+			return copyError
+		}
+		if bytesWritten == 0 {
+			fmt.Println("[WARN] No bytes written for chunk", chunk.Id, "in output file")
+		}
+		fmt.Printf("(%d/%d) chunk %d concatenated\t(%f%%)\n", i+1, len(chunks), chunks[i].Id, float32(i+1)/float32(len(chunks))*100)
+	}
+
+	return nil
 }
 
 func isSorted(chunks *[]Chunk) bool {
