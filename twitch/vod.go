@@ -63,6 +63,19 @@ type videoResponse struct {
 	} `json:"data"`
 }
 
+// Représente une réponse de l'api GraphQL de Twitch lors de la requête d'information sur une liste de vidéos d'une chaîne
+type userVideosResponse struct {
+	Data struct {
+		User struct {
+			Videos struct {
+				Edges []struct {
+					Node Video `json:"node"`
+				} `json:"edges"`
+			} `json:"videos"`
+		} `json:"user"`
+	} `json:"data"`
+}
+
 // Représente une réponse de l'api GraphQL de Twitch lors de la requête d'un token d'accès sur une vidéo
 type tokenPlaybackResponse struct {
 	Data struct {
@@ -98,6 +111,26 @@ func getPlaybackTokenQuery(videoId string) string {
             value
 			signature
         }
+	}`
+}
+
+// Requête GraphQL pour récupéré la liste des vidéos disponibles pour une chaîne donnée
+func getVideosByChannel(channelName string) string {
+	return `{
+		user(login: "` + channelName + `") {
+			videos(first: 10, type: ARCHIVE) {
+				edges {
+					node {
+						id
+						title
+						description
+						publishedAt
+						broadcastType
+						lengthSeconds
+					}
+				}
+			}
+		}
 	}`
 }
 
@@ -161,6 +194,25 @@ func GetVideoWithContext(ctx context.Context, videoId string) Video {
 	}
 	video.Data.Video.Context = ctx
 	return video.Data.Video
+}
+
+// Récupère les informations des vidéos d'une chaîne
+func GetVideos(channelName string) []Video {
+	return GetVideosWithContext(context.Background(), channelName)
+}
+
+// Récupère les informations des vidéos d'une chaîne, avec un contexte
+func GetVideosWithContext(ctx context.Context, channelName string) []Video {
+	data, err := internals.PostGraphQL[userVideosResponse](getVideosByChannel(channelName))
+	if err != nil {
+		panic(err)
+	}
+	videos := make([]Video, 0)
+	for _, edge := range data.Data.User.Videos.Edges {
+		edge.Node.Context = ctx
+		videos = append(videos, edge.Node)
+	}
+	return videos
 }
 
 // Récupère la playlist de la vidéo
