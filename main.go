@@ -1,10 +1,10 @@
 package main
 
 import (
-	"fmt"
+	"time"
 
-	"enssat.tv/autovodsaver/twitch"
 	"enssat.tv/autovodsaver/utils"
+	"enssat.tv/autovodsaver/watchdog"
 	"github.com/rs/zerolog"
 )
 
@@ -35,13 +35,16 @@ func main() {
 			os.Exit(1)
 		}
 	*/
-	/*
-		wd := watchdog.NewSQLiteWatchdog("")
-		if err := wd.Run(); err != nil {
-			logger.Error().Msg(err.Error())
+	wd := watchdog.NewWithContext(ctx, "sqlite", "mistermv")
+	ch := wd.OnVideoUpdate()
+	go func() {
+		for msg := range *ch {
+			logger.Info().Msgf("watchdog said vod %s has status %s", msg.Id, msg.Status)
 		}
-		time.Sleep(time.Second * 5)
-		wd.Stop()
-	*/
-	fmt.Println(twitch.GetVideos("mistermv"))
+	}()
+	if err := wd.Run(); err != nil {
+		logger.Error().Msg(err.Error())
+	}
+	time.Sleep(time.Second * 30)
+	wd.Stop()
 }
