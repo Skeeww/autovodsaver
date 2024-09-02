@@ -9,7 +9,7 @@ import (
 
 const httpEndpoint = "https://usher.ttvnw.net/vod"
 
-func GetPlaylists(videoId string, accessToken string, signature string) string {
+func GetPlaylists(videoId string, accessToken string, signature string) (string, error) {
 	params := url.Values{}
 	params.Add("nauth", accessToken)
 	params.Add("nauthsig", signature)
@@ -19,15 +19,15 @@ func GetPlaylists(videoId string, accessToken string, signature string) string {
 
 	res, responseError := http.Get(fmt.Sprintf("%s/%s?%s", httpEndpoint, videoId, params.Encode()))
 	if responseError != nil {
-		panic(responseError)
+		return "", responseError
 	}
 	if res.StatusCode != http.StatusOK {
-		panic("wrong status code " + res.Status)
+		return "", fmt.Errorf("wrong status code %s", res.Status)
 	}
 	payload, readAllError := io.ReadAll(res.Body)
 	if readAllError != nil {
-		panic(readAllError)
+		return "", readAllError
 	}
 
-	return string(payload)
+	return string(payload), nil
 }

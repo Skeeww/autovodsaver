@@ -223,7 +223,11 @@ func (v *Video) GetPlaylist() *PlaylistInfo {
 		return v.GetPlaylist()
 	}
 	tokens := value.(VideoPlaybackAccessToken)
-	return parseM3U8(internals.GetPlaylists(v.Id, tokens.Value, tokens.Signature))
+	playlist, getPlayListError := internals.GetPlaylists(v.Id, tokens.Value, tokens.Signature)
+	if getPlayListError != nil {
+		return nil
+	}
+	return parseM3U8(playlist)
 }
 
 // Récupère les médias de la vidéo à partir d'une playlist
@@ -265,7 +269,7 @@ func (v *Video) Download(outputPath string) error {
 	// Get all chunks download URI
 	playlist := v.GetPlaylist()
 	if playlist == nil {
-		return fmt.Errorf("playlist choosen is nil")
+		return fmt.Errorf("video could not be retrieved (the vod is behind a paywall or an internal error occured)")
 	}
 	log.Debug().Msgf("found playlist: %s (resolution=%s;framerate=%f)\n", playlist.Url, playlist.Resolution, playlist.Framerate)
 	chunks := v.GetChunks(playlist)

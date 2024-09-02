@@ -6,8 +6,8 @@ import (
 	"os"
 	"strconv"
 
+	"enssat.tv/autovodsaver/constants"
 	"enssat.tv/autovodsaver/twitch"
-	"enssat.tv/autovodsaver/utils"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
@@ -28,12 +28,11 @@ type Credentials struct {
 }
 
 func NewS3Storage(endpoint string, region string, bucket string, creds Credentials) (*S3Storage, error) {
-	ctx := utils.GetDefaultContext()
-	return NewS3StorageWithContext(ctx, endpoint, region, bucket, creds)
+	return NewS3StorageWithContext(context.Background(), endpoint, region, bucket, creds)
 }
 
 func NewS3StorageWithContext(ctx context.Context, endpoint string, region string, bucket string, creds Credentials) (*S3Storage, error) {
-	logger := ctx.Value(utils.LoggerKey).(*zerolog.Logger)
+	logger := ctx.Value(constants.LoggerKey).(*zerolog.Logger)
 
 	client := s3.New(s3.Options{
 		BaseEndpoint: aws.String(endpoint),
@@ -68,7 +67,7 @@ func NewS3StorageWithContext(ctx context.Context, endpoint string, region string
 }
 
 func (s *S3Storage) GetVideos() ([]twitch.Video, error) {
-	logger := s.Context.Value(utils.LoggerKey).(*zerolog.Logger)
+	logger := s.Context.Value(constants.LoggerKey).(*zerolog.Logger)
 
 	if s.Client == nil {
 		return []twitch.Video{}, fmt.Errorf("s3 client is nil, is the client initialize correctly ?")
@@ -101,7 +100,7 @@ func (s *S3Storage) GetVideos() ([]twitch.Video, error) {
 }
 
 func (s *S3Storage) Save(video *twitch.Video, filePath string) error {
-	logger := s.Context.Value(utils.LoggerKey).(*zerolog.Logger)
+	logger := s.Context.Value(constants.LoggerKey).(*zerolog.Logger)
 
 	if s.Client == nil {
 		return fmt.Errorf("s3 client is nil, is the client initialize correctly ?")
